@@ -1,4 +1,4 @@
-use crate::OutputFormat;
+use crate::cli::OutputFormat;
 use serde_json::Value;
 use std::fs;
 
