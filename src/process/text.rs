@@ -1,7 +1,9 @@
 use crate::{get_reader, process_gen_pass, TextSignFormat};
-use anyhow::Result;
+use anyhow::{anyhow, Result};
 use base64::engine::general_purpose::URL_SAFE_NO_PAD;
 use base64::Engine;
+use chacha20poly1305::aead::Aead;
+use chacha20poly1305::{AeadCore, ChaCha20Poly1305, Key, KeyInit, Nonce};
 use ed25519_dalek::{Signature, Signer, SigningKey, Verifier, VerifyingKey};
 use rand::rngs::OsRng;
 use std::fs;
@@ -153,6 +155,61 @@ impl Ed25519Verifier {
     }
 }
 
+struct ChaCha {
+    key: [u8; 32],
+}
+
+impl ChaCha {
+    pub fn build(key: &[u8]) -> Result<Self> {
+        let key = &key[..32];
+        let key = key.try_into()?;
+        Ok(Self { key })
+    }
+
+    pub fn encrypt(&self, reader: &mut dyn Read) -> Result<Vec<u8>> {
+        let mut buf = Vec::new();
+        reader.read_to_end(&mut buf)?;
+
+        let key = Key::from_slice(&self.key);
+        let cipher = ChaCha20Poly1305::new(key);
+
+        let nonce = ChaCha20Poly1305::generate_nonce(&mut OsRng); // 96-bits; unique per message
+
+        let ciphertext = cipher
+            .encrypt(&nonce, &*buf)
+            .or(Err(anyhow!("encrypt error")))?;
+
+        // 拼接 nonce 和密文
+        let mut output = Vec::with_capacity(12 + ciphertext.len());
+        output.extend_from_slice(nonce.as_slice());
+        output.extend_from_slice(&ciphertext);
+        Ok(output)
+    }
+
+    pub fn decrypt(&self, reader: &mut dyn Read) -> Result<Vec<u8>> {
+        let mut buf = Vec::new();
+        reader.read_to_end(&mut buf)?;
+        let buf = URL_SAFE_NO_PAD.decode(&buf)?;
+
+        let key = Key::from_slice(&self.key);
+        let cipher = ChaCha20Poly1305::new(key);
+
+        let (nonce_bytes, ciphertext) = buf.split_at(12);
+        let nonce = Nonce::from_slice(nonce_bytes);
+
+        cipher
+            .decrypt(nonce, ciphertext)
+            .or(Err(anyhow!("decrypt error")))
+    }
+}
+
+impl KeyLoader for ChaCha {
+    fn load(path: impl AsRef<Path>) -> Result<Self> {
+        let key = fs::read(path)?;
+        Self::build(&key)
+    }
+}
+
 pub fn process_text_sign(input: &str, key: &str, format: TextSignFormat) -> Result<String> {
     let mut reader = get_reader(input)?;
     let signed = match format {
@@ -196,6 +253,23 @@ pub fn process_text_generate(format: TextSignFormat) -> Result<Vec<Vec<u8>>> {
         TextSignFormat::Blake3 => Blake3::generate(),
         TextSignFormat::Ed25519 => Ed25519Signer::generate(),
     }
+}
+
+pub fn process_text_encrypt(input: &str, key: &str) -> Result<String> {
+    let mut reader = get_reader(input)?;
+
+    let chacha20poly1305 = ChaCha::load(key)?;
+    let result = chacha20poly1305.encrypt(&mut reader)?;
+    let result = URL_SAFE_NO_PAD.encode(&result);
+    Ok(result)
+}
+
+pub fn process_text_decrypt(input: &str, key: &str) -> Result<String> {
+    let mut reader = get_reader(input)?;
+
+    let chacha20poly1305 = ChaCha::load(key)?;
+    let result = chacha20poly1305.decrypt(&mut reader)?;
+    Ok(String::from_utf8(result.clone())?)
 }
 
 #[cfg(test)]
