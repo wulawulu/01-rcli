@@ -2,9 +2,9 @@ use anyhow::Result;
 use axum::{
     extract::{Path, State},
     http::StatusCode,
+    http::{header, HeaderMap},
     routing::get,
     Router,
-    http::{header, HeaderMap}
 };
 use std::{net::SocketAddr, path::PathBuf, sync::Arc};
 use tower_http::services::ServeDir;
@@ -34,7 +34,7 @@ pub async fn process_http_serve(path: PathBuf, port: u16) -> Result<()> {
 async fn file_handler(
     State(state): State<Arc<HttpServeState>>,
     Path(path): Path<String>,
-) -> (StatusCode,HeaderMap, String) {
+) -> (StatusCode, HeaderMap, String) {
     let p = std::path::Path::new(&state.path).join(path);
     info!("Reading file {:?}", p);
     if !p.exists() {
@@ -54,24 +54,36 @@ async fn file_handler(
                 if let Ok(entry) = entry {
                     let path = entry.path();
                     let path_str = path.display().to_string().replace("\\", "/");
-                    let file_name = format!("<li><a href=\"{}\">{}</a></li>", path_str, path.file_name().unwrap().to_str().unwrap());
+                    let file_name = format!(
+                        "<li><a href=\"{}\">{}</a></li>",
+                        path_str,
+                        path.file_name().unwrap().to_str().unwrap()
+                    );
                     item.push_str(&file_name);
                 }
             }
             let mut headers = HeaderMap::new();
             headers.insert(header::CONTENT_TYPE, "text/html".parse().unwrap());
 
-            return (StatusCode::OK,headers, format!("<!DOCTYPE html><html><body><ul>{}</ul></body></html>",item))
+            return (
+                StatusCode::OK,
+                headers,
+                format!("<!DOCTYPE html><html><body><ul>{}</ul></body></html>", item),
+            );
         }
 
         match tokio::fs::read_to_string(p).await {
             Ok(content) => {
                 info!("Read {} bytes", content.len());
-                (StatusCode::OK,HeaderMap::new(), content)
+                (StatusCode::OK, HeaderMap::new(), content)
             }
             Err(e) => {
                 warn!("Error reading file {:?}", e);
-                (StatusCode::INTERNAL_SERVER_ERROR,HeaderMap::new(), e.to_string())
+                (
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    HeaderMap::new(),
+                    e.to_string(),
+                )
             }
         }
     }
@@ -86,7 +98,7 @@ mod tests {
         let state = Arc::new(HttpServeState {
             path: PathBuf::from("."),
         });
-        let (status,_, content) = file_handler(State(state), Path("Cargo.toml".to_string())).await;
+        let (status, _, content) = file_handler(State(state), Path("Cargo.toml".to_string())).await;
         assert_eq!(status, StatusCode::OK);
         assert!(content.trim().starts_with("[package]"));
     }
