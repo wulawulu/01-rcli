@@ -5,9 +5,9 @@ use crate::{
 };
 use clap::Parser;
 use core::fmt;
+use enum_dispatch::enum_dispatch;
 use std::path::PathBuf;
 use std::str::FromStr;
-use enum_dispatch::enum_dispatch;
 use tokio::fs;
 
 #[derive(Debug, Parser)]

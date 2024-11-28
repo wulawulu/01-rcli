@@ -1,8 +1,8 @@
 use super::verify_file;
+use crate::{process_csv, CmdExecutor};
 use clap::Parser;
 use std::fmt;
 use std::str::FromStr;
-use crate::{process_csv, CmdExecutor};
 
 #[derive(Debug, Parser)]
 pub struct CsvOpts {

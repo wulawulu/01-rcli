@@ -1,6 +1,6 @@
+use crate::{process_gen_pass, CmdExecutor};
 use clap::Parser;
 use zxcvbn::zxcvbn;
-use crate::{process_gen_pass, CmdExecutor};
 
 #[derive(Debug, Parser)]
 pub struct GenPassOpts {

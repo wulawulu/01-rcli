@@ -50,17 +50,15 @@ async fn file_handler(
         // <html><body><ul>...</ul></body></html>
         if p.is_dir() {
             let mut item = String::new();
-            for entry in p.read_dir().expect("read_dir call failed") {
-                if let Ok(entry) = entry {
-                    let path = entry.path();
-                    let path_str = path.display().to_string().replace("\\", "/");
-                    let file_name = format!(
-                        "<li><a href=\"{}\">{}</a></li>",
-                        path_str,
-                        path.file_name().unwrap().to_str().unwrap()
-                    );
-                    item.push_str(&file_name);
-                }
+            for entry in p.read_dir().expect("read_dir call failed").flatten() {
+                let path = entry.path();
+                let path_str = path.display().to_string().replace("\\", "/");
+                let file_name = format!(
+                    "<li><a href=\"{}\">{}</a></li>",
+                    path_str,
+                    path.file_name().unwrap().to_str().unwrap()
+                );
+                item.push_str(&file_name);
             }
             let mut headers = HeaderMap::new();
             headers.insert(header::CONTENT_TYPE, "text/html".parse().unwrap());
